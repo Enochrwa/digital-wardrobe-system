@@ -37,8 +37,9 @@ const apiClient = async (endpoint: string, options: RequestOptions = {}) => {
   };
 
   // Determine the base URL
-  const VITE_BASE_URL = 'https://wardrobe-system-backend.onrender.com' || '';
-  const finalApiUrl = VITE_BASE_URL ? `${VITE_BASE_URL}/api${endpoint}` : `/api${endpoint}`;
+  const VITE_BASE_URL = 'https://wardrobe-system-backend.onrender.com'
+
+    const finalApiUrl = VITE_BASE_URL ? `${VITE_BASE_URL}/api${endpoint}` : `/api${endpoint}`;
 
   try {
     const response = await fetch(finalApiUrl, config);
