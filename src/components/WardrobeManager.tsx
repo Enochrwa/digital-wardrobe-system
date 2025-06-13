@@ -117,18 +117,21 @@ const WardrobeManager = () => {
   const handleSaveItem = async (newItemData: Omit<WardrobeItemCreate, 'image_url'>, imageFile?: File) => {
     if (!token) {
       toast({ title: "Authentication Error", description: "You must be logged in to add items.", variant: "destructive" });
-      return;
+      // Throw an error to ensure the promise returned by this async function is rejected.
+      throw new Error("Authentication Error: You must be logged in to add items.");
     }
     try {
       // Use the new addItem function from apiClient which handles FormData
       const savedItem = await apiClient.addItem(newItemData, imageFile);
 
-      fetchItems(); // Re-fetch to get the latest list
-      setIsAddModalOpen(false);
+      await fetchItems(); // Re-fetch to get the latest list, ensure it completes before toast
+      // setIsAddModalOpen(false); // This is now handled by AddItemModal on successful save.
       toast({ title: "Success", description: `${savedItem.name} added to your wardrobe.` });
+      // Implicitly returns a resolved promise here
     } catch (err: any) {
       console.error("Failed to save item:", err);
       toast({ title: "Error", description: err.message || "Could not save item.", variant: "destructive" });
+      throw err; // Re-throw the error to ensure the promise is rejected, so AddItemModal can catch it.
     }
   };
 

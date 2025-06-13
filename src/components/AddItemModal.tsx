@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, Upload, Save } from 'lucide-react';
+import { X, Upload, Save, Loader2 } from 'lucide-react'; // Added Loader2
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast'; // Corrected path for ShadCN UI
@@ -9,12 +9,12 @@ import { WardrobeItemCreate } from './WardrobeManager'; // Import the interface
 export interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // Update onSave to pass the image file
-  onSave: (newItemData: Omit<WardrobeItemCreate, 'image_url'>, imageFile?: File) => void;
+  onSave: (newItemData: Omit<WardrobeItemCreate, 'image_url'>, imageFile?: File) => Promise<void>; // Changed to Promise<void>
 }
 
 const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
-  const [itemData, setItemData] = useState<Omit<WardrobeItemCreate, 'image_url' | 'tags' | 'price'> & { tags: string; price: string; image_url?: string }>({ // Keep image_url for now if direct URL is an option
+  const [isSaving, setIsSaving] = useState<boolean>(false); // Added isSaving state
+  const [itemData, setItemData] = useState<Omit<WardrobeItemCreate, 'image_url' | 'tags' | 'price'> & { tags: string; price: string; image_url?: string }>({
     name: '',
     brand: '',
     category: 'Shirts', // Default category
@@ -34,12 +34,9 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
 
   const categories = ['Shirts', 'Pants', 'Dresses', 'Shoes', 'Accessories', 'Jackets', 'Sweaters', 'Other'];
   const seasons = ['Spring', 'Summer', 'Fall', 'Winter', 'All Seasons'];
-  // Optional: Define some common colors or allow free text
-  // const commonColors = ['Red', 'Blue', 'Green', 'Black', 'White', 'Teal', 'Pink', 'Purple', 'Orange', 'Brown', 'Gray', 'Beige'];
 
-
-  const handleSave = () => {
-    if (!itemData.name || !itemData.brand || !itemData.category) { // Added category check
+  const handleSave = async () => { // Made async
+    if (!itemData.name || !itemData.brand || !itemData.category) {
       toast({
         title: "Missing Required Fields",
         description: "Please fill in Name, Brand, and Category.",
@@ -47,6 +44,8 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
       });
       return;
     }
+
+    setIsSaving(true); // Set loading state
 
     const newItemData: Omit<WardrobeItemCreate, 'image_url'> = {
       name: itemData.name,
@@ -59,30 +58,38 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
       tags: itemData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
       color: itemData.color || undefined,
       notes: itemData.notes || undefined,
-      // image_url is handled by the imageFile or explicitly if backend supports direct URL alongside file
     };
 
-    onSave(newItemData, imageFile || undefined);
-
-    // Reset form and close
-    setItemData({
-      name: '',
-      brand: '',
-      category: 'Shirts',
-      size: '',
-      price: '',
-      material: '',
-      season: 'All Seasons',
-      tags: '',
-      color: '',
-      notes: '',
-    });
-    setImageFile(null);
-    setImagePreview(null);
-    onClose();
+    try {
+      await onSave(newItemData, imageFile || undefined);
+      // Reset form and close only on successful save
+      setItemData({
+        name: '',
+        brand: '',
+        category: 'Shirts',
+        size: '',
+        price: '',
+        material: '',
+        season: 'All Seasons',
+        tags: '',
+        color: '',
+        notes: '',
+      });
+      setImageFile(null);
+      setImagePreview(null);
+      onClose();
+    } catch (error) {
+      // Error is handled by WardrobeManager's toast, modal remains open
+      console.error("AddItemModal: Save failed", error);
+      // Optionally, display a generic error message within the modal if needed,
+      // but current setup relies on WardrobeManager for toasts.
+    } finally {
+      setIsSaving(false); // Reset loading state
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isSaving) return; // Prevent change if saving
     const file = event.target.files?.[0];
     if (file) {
       setImageFile(file);
@@ -104,7 +111,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
       <div className="bg-white dark:bg-gray-800 rounded-2xl xs:rounded-3xl w-full max-w-xs xs:max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl max-h-[95vh] xs:max-h-[90vh] overflow-y-auto">
         <div className="p-3 xs:p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-lg xs:text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Add New Item</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} className="p-1 xs:p-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={isSaving} className="p-1 xs:p-2">
             <X size={16} className="xs:w-5 xs:h-5" />
           </Button>
         </div>
@@ -120,6 +127,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, name: e.target.value})}
                 placeholder="e.g., Blue Cotton Shirt"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
 
@@ -132,6 +140,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, brand: e.target.value})}
                 placeholder="e.g., Zara, H&M, Nike"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
 
@@ -143,6 +152,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 value={itemData.category}
                 onChange={(e) => setItemData({...itemData, category: e.target.value})}
                 className="w-full p-2 xs:p-3 text-sm xs:text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 h-10 xs:h-11"
+                disabled={isSaving}
               >
                 {categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -159,6 +169,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, size: e.target.value})}
                 placeholder="e.g., M, 32, 9"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
 
@@ -172,6 +183,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, price: e.target.value})}
                 placeholder="0.00"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
 
@@ -184,6 +196,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, material: e.target.value})}
                 placeholder="e.g., Cotton, Denim, Silk"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
 
@@ -195,6 +208,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 value={itemData.season}
                 onChange={(e) => setItemData({...itemData, season: e.target.value})}
                 className="w-full p-2 xs:p-3 text-sm xs:text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 h-10 xs:h-11"
+                disabled={isSaving}
               >
                 {seasons.map(season => (
                   <option key={season} value={season}>{season}</option>
@@ -220,6 +234,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                   accept="image/*"
                   onChange={handleFileChange}
                   className="ml-4 text-sm xs:text-base file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:bg-owis-mint/20 file:text-owis-forest hover:file:bg-owis-mint/40"
+                  disabled={isSaving}
                 />
               </div>
             </div>
@@ -233,6 +248,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
                 onChange={(e) => setItemData({...itemData, color: e.target.value})}
                 placeholder="e.g., Blue, Multi-color"
                 className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+                disabled={isSaving}
               />
             </div>
           </div>
@@ -246,6 +262,7 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
               onChange={(e) => setItemData({...itemData, tags: e.target.value})}
               placeholder="casual, summer, cotton"
               className="bg-white/80 border-owis-sage/30 text-sm xs:text-base h-10 xs:h-11"
+              disabled={isSaving}
             />
           </div>
 
@@ -259,17 +276,30 @@ const AddItemModal = ({ isOpen, onClose, onSave }: AddItemModalProps) => {
               placeholder="e.g., Purchased for wedding, very comfortable"
               rows={2}
               className="w-full p-2 xs:p-3 text-sm xs:text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              disabled={isSaving}
             />
           </div>
 
-
           <div className="flex flex-col xs:flex-row gap-2 xs:gap-3 pt-3 xs:pt-4">
-            <Button variant="outline" onClick={onClose} className="flex-1 h-10 xs:h-11 text-sm xs:text-base">
+            <Button variant="outline" onClick={onClose} disabled={isSaving} className="flex-1 h-10 xs:h-11 text-sm xs:text-base">
               Cancel
             </Button>
-            <Button onClick={handleSave} className="flex-1 h-10 xs:h-11 text-sm xs:text-base bg-owis-purple hover:bg-owis-purple-dark text-owis-forest">
-              <Save size={14} className="xs:w-4 xs:h-4 mr-1 xs:mr-2" />
-              Add Item
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving} 
+              className="flex-1 h-10 xs:h-11 text-sm xs:text-base bg-owis-purple hover:bg-owis-purple-dark text-owis-forest"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={14} className="xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+                  Add Item
+                </>
+              )}
             </Button>
           </div>
         </div>
